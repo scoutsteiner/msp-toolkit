@@ -1,0 +1,1 @@
+Get-WinEvent -LogName System -MaxEvents 20
