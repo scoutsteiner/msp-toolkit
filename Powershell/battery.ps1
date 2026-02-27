@@ -1,0 +1,1 @@
+powercfg /batteryreport /output C:\T3\battery-report.html
