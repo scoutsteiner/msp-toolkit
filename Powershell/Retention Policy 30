@@ -1,0 +1,7 @@
+#Batch Update Retention Policy for 30 Days
+Get-Mailbox -ResultSize Unlimited |
+Where-Object {$_.RetainDeletedItemsFor -lt 30 -or $_.UseDatabaseRetentionDefaults -eq $true} |
+Set-Mailbox -UseDatabaseRetentionDefaults $false -RetainDeletedItemsFor 30
+#Verify
+Get-Mailbox -ResultSize Unlimited |
+Select DisplayName,RetainDeletedItemsFor,UseDatabaseRetentionDefaults
