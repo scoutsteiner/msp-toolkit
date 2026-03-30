@@ -1,0 +1,11 @@
+# The 30-Day Purge Protocol
+$TargetFolder = "$env:USERPROFILE\Downloads"
+$DaysOld = 30
+$Threshold = (Get-Date).AddDays(-$DaysOld)
+Write-Host "Scanning $TargetFolder for assets older than $DaysOld days..."
+-ForegroundColor Cyan
+# Remove the -WhatIf tag only when you are absolutely ready to execute the live
+purge.
+Get-ChildItem -Path $TargetFolder -Recurse -File | Where-Object {
+$_.LastWriteTime -lt $Threshold } | Remove-Item -Force -WhatIf
+Write-Host "Purge Complete. Storage reclaimed." -ForegroundColor Green
