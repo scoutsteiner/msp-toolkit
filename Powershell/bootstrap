@@ -1,0 +1,13 @@
+# The Operator's Software Provisioning Protocol
+Write-Host "Initiating CLI Supply Chain..." -ForegroundColor Cyan
+winget install 7zip.7zip -e --accept-package-agreements
+--accept-source-agreements
+winget install Discord.Discord -e --accept-package-agreements
+--accept-source-agreements
+winget install Spotify.Spotify -e --accept-package-agreements
+--accept-source-agreements
+winget install VideoLAN.VLC -e --accept-package-agreements
+--accept-source-agreements
+winget install Mozilla.Firefox -e --accept-package-agreements
+--accept-source-agreements
+Write-Host "Environment Provisioned Successfully." -ForegroundColor Green
