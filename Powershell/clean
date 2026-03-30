@@ -1,0 +1,13 @@
+@echo off
+color 0a
+title CITADEL CLEANER
+echo INITIATING CLEANING PROTOCOL...
+echo.
+echo [1] Deleting Temp Files...
+del /q /f /s %temp%\*
+echo.
+echo [2] Flushing DNS Cache...
+ipconfig /flushdns
+echo.
+echo [3] System Optimized.
+pause
