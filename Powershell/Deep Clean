@@ -1,0 +1,6 @@
+# Initiating Deep System Maintenance
+Write-Host "1. Purging Temporary Architecture..." -ForegroundColor Cyan
+Remove-Item -Path "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
+Write-Host "2. Repairing Corrupted Core Files..." -ForegroundColor Cyan
+sfc /scannow
+Write-Host "System Architecture Optimized." -ForegroundColor Green
