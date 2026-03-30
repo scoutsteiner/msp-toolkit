@@ -11,3 +11,42 @@ winget install VideoLAN.VLC -e --accept-package-agreements
 winget install Mozilla.Firefox -e --accept-package-agreements
 --accept-source-agreements
 Write-Host "Environment Provisioned Successfully." -ForegroundColor Green
+
+
+# Personal Bootstrap Script
+Write-Host "Initiating CLI Supply Chain..." -ForegroundColor Cyan
+
+$packages = @(
+    "7zip.7zip"
+    "Google.Chrome"
+    "Discord.Discord"
+    "Spotify.Spotify"
+    "VideoLAN.VLC"
+    "AnyDeskSoftwareGmbH.AnyDesk"
+    "angryziber.AngryIPScanner"
+    "Microsoft.VisualStudioCode"
+    "Git.Git"
+    "Tailscale.Tailscale"
+    "WinDirStat.WinDirStat"
+    "PuTTY.PuTTY"
+)
+
+$failed = @()
+
+foreach ($pkg in $packages) {
+    Write-Host "Installing $pkg ..." -ForegroundColor Yellow
+    winget install --id $pkg -e --accept-package-agreements --accept-source-agreements
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Failed: $pkg" -ForegroundColor Red
+        $failed += $pkg
+    } else {
+        Write-Host "Installed: $pkg" -ForegroundColor Green
+    }
+}
+
+if ($failed.Count -gt 0) {
+    Write-Host "`nSome packages failed:" -ForegroundColor Red
+    $failed | ForEach-Object { Write-Host " - $_" -ForegroundColor Red }
+} else {
+    Write-Host "`nEnvironment Provisioned Successfully." -ForegroundColor Green
+}
