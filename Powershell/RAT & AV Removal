@@ -1,0 +1,257 @@
+<#
+.SYNOPSIS
+  Uninstall specific remote-access tools (RATs) and legacy/junk AV by display name match.
+  Designed for RMM deployment via VSAX Automation Hub (runs as SYSTEM).
+
+HOW TO USE:
+  - To TEST (no changes made):  Leave the $WhatIf line as-is
+  - To RUN FOR REAL:            Put a # in front of the $WhatIf line to comment it out
+#>
+
+# -------------------------------------------------------------------------
+# WHATIF TOGGLE
+# To TEST:         Leave the line below as-is (nothing will be uninstalled)
+# To RUN FOR REAL: Put a # at the start of the line below
+# -------------------------------------------------------------------------
+#$WhatIf = $true
+
+# -------------------------------------------------------------------------
+# SETTINGS
+# -------------------------------------------------------------------------
+$LogPath = "C:\ProgramData\T3\UninstallCleanup.log"
+
+$TargetNamePatterns = @(
+    # Remote Access / RATs
+    'TeamViewer',
+    'GoToAssist',
+    'GoTo Opener',
+    'LogMeIn',
+    'Splashtop',
+    'Syncro',
+
+    # Legacy AV / Junk AV
+    'McAfee',
+    'Norton Security',
+    'AVG Secure Browser',
+    'AVG Update Helper'
+
+    # Uncomment below ONLY if you want ESET management agent removed
+    # 'ESET Management Agent'
+)
+
+# Processes and services to kill/stop before uninstalling GoToAssist
+# These prevent the GoToAssist uninstaller from failing with exit code 1
+$GoToAssistProcesses = @(
+    'g2ac',
+    'g2comm',
+    'g2mainh',
+    'g2svc',
+    'g2tray',
+    'GoToAssist',
+    'GoTo'
+)
+
+$GoToAssistServices = @(
+    'GoToAssist',
+    'GoToAssist Corporate',
+    'g2svc'
+)
+
+$UninstallTimeoutSeconds = 300
+
+# -------------------------------------------------------------------------
+# LOGGING
+# -------------------------------------------------------------------------
+function Write-Log {
+    param([string]$Message)
+    $ts   = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $line = "[$ts] $Message"
+    $dir  = Split-Path -Parent $LogPath
+    if (-not (Test-Path $dir)) { New-Item -Path $dir -ItemType Directory -Force | Out-Null }
+    Add-Content -Path $LogPath -Value $line
+    Write-Output $line
+}
+
+# -------------------------------------------------------------------------
+# STOP GOTO PROCESSES AND SERVICES
+# Runs before uninstalling any GoToAssist app to prevent exit code 1 failures
+# -------------------------------------------------------------------------
+function Stop-GoToAssist {
+    Write-Log "Attempting to stop GoToAssist processes and services before uninstall..."
+
+    # Stop services first
+    foreach ($svc in $GoToAssistServices) {
+        $service = Get-Service -Name $svc -ErrorAction SilentlyContinue
+        if ($service) {
+            try {
+                Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
+                Write-Log "  Stopped service: $svc"
+            } catch {
+                Write-Log "  Could not stop service $svc (may already be stopped)"
+            }
+        }
+    }
+
+    # Kill any remaining processes
+    foreach ($procName in $GoToAssistProcesses) {
+        $procs = Get-Process -Name $procName -ErrorAction SilentlyContinue
+        foreach ($proc in $procs) {
+            try {
+                $proc.Kill()
+                Write-Log "  Killed process: $($proc.Name) (PID $($proc.Id))"
+            } catch {
+                Write-Log "  Could not kill process $($proc.Name): $($_.Exception.Message)"
+            }
+        }
+    }
+
+    # Brief pause to let everything settle before uninstaller runs
+    Start-Sleep -Seconds 3
+}
+
+# -------------------------------------------------------------------------
+# REGISTRY SCAN
+# -------------------------------------------------------------------------
+function Get-InstalledApps {
+    $paths = @(
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+    )
+
+    $apps = foreach ($p in $paths) {
+        Get-ItemProperty -Path $p -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -and $_.UninstallString } |
+            Select-Object DisplayName, DisplayVersion, Publisher,
+                          UninstallString, QuietUninstallString
+    }
+
+    $apps | Sort-Object DisplayName, DisplayVersion, UninstallString -Unique
+}
+
+# -------------------------------------------------------------------------
+# BUILD UNINSTALL COMMAND
+# -------------------------------------------------------------------------
+function Build-UninstallCommand {
+    param([Parameter(Mandatory)] $App)
+
+    $raw = if ($App.QuietUninstallString) { $App.QuietUninstallString } else { $App.UninstallString }
+    if (-not $raw) { return $null }
+
+    $cmd = $raw.Trim()
+
+    # MSI-based uninstallers
+    if ($cmd -match '(?i)msiexec(\.exe)?') {
+        if ($cmd -match '(?i)/I\s*(\{[0-9A-F\-]+\})') {
+            return "msiexec.exe /x $($Matches[1]) /qn /norestart"
+        }
+        if ($cmd -match '(?i)/X\s*(\{[0-9A-F\-]+\})') {
+            return "msiexec.exe /x $($Matches[1]) /qn /norestart"
+        }
+    }
+
+    # EXE-based uninstallers
+    $exePath = $null
+    $exeArgs = ''
+
+    if ($cmd -match '^"([^"]+\.exe)"(.*)$') {
+        $exePath = $Matches[1].Trim()
+        $exeArgs = $Matches[2].Trim()
+    }
+    elseif ($cmd -match '^([A-Za-z]:\\[^\s/]+\.exe)(.*)$') {
+        $exePath = $Matches[1].Trim()
+        $exeArgs = $Matches[2].Trim()
+    }
+    elseif ($cmd -match '^([A-Za-z]:\\.+\.exe)(.*)$') {
+        $exePath = $Matches[1].Trim()
+        $exeArgs = $Matches[2].Trim()
+    }
+
+    if ($exePath) {
+        if (-not (Test-Path $exePath)) {
+            Write-Log "WARNING: Uninstaller not found at path: $exePath"
+        }
+
+        if (-not $App.QuietUninstallString) {
+            if ($exeArgs -notmatch '(?i)/S\b|/silent|/quiet|/VERYSILENT') {
+                $exeArgs = "$exeArgs /S".Trim()
+            }
+        }
+
+        return "`"$exePath`" $exeArgs".Trim()
+    }
+
+    return $cmd
+}
+
+# -------------------------------------------------------------------------
+# MAIN
+# -------------------------------------------------------------------------
+Write-Log "=== Starting uninstall cleanup on $env:COMPUTERNAME (User: $env:USERNAME) ==="
+Write-Log "WhatIf mode: $WhatIf"
+Write-Log "Targets: $($TargetNamePatterns -join ', ')"
+
+$installed   = Get-InstalledApps
+$matchedApps = foreach ($app in $installed) {
+    foreach ($pat in $TargetNamePatterns) {
+        if ($app.DisplayName -like "*$pat*") {
+            [pscustomobject]@{
+                Pattern      = $pat
+                DisplayName  = $app.DisplayName
+                Version      = $app.DisplayVersion
+                Publisher    = $app.Publisher
+                UninstallCmd = (Build-UninstallCommand -App $app)
+            }
+            break
+        }
+    }
+}
+
+if (-not $matchedApps) {
+    Write-Log "No matching applications found. Nothing to do. Exiting."
+    exit 0
+}
+
+Write-Log ("Found {0} matching application(s):" -f @($matchedApps).Count)
+$matchedApps | ForEach-Object {
+    Write-Log ("  - [{0}] {1} v{2} | Cmd: {3}" -f $_.Pattern, $_.DisplayName, $_.Version, $_.UninstallCmd)
+}
+
+# Check if any GoToAssist apps are in the list and pre-emptively stop them
+$hasGoTo = $matchedApps | Where-Object { $_.Pattern -like '*GoTo*' }
+if ($hasGoTo -and -not $WhatIf) {
+    Stop-GoToAssist
+}
+
+foreach ($m in $matchedApps) {
+
+    if (-not $m.UninstallCmd) {
+        Write-Log "SKIP: No uninstall command found for '$($m.DisplayName)'. Manual removal required."
+        continue
+    }
+
+    if ($WhatIf) {
+        Write-Log "WHATIF: Would uninstall '$($m.DisplayName)' using: $($m.UninstallCmd)"
+    } else {
+        Write-Log "UNINSTALL: Starting '$($m.DisplayName)' using: $($m.UninstallCmd)"
+        try {
+            $proc     = Start-Process -FilePath "cmd.exe" -ArgumentList "/c", $m.UninstallCmd -PassThru -WindowStyle Hidden
+            $finished = $proc.WaitForExit($UninstallTimeoutSeconds * 1000)
+
+            if (-not $finished) {
+                Write-Log "TIMEOUT: '$($m.DisplayName)' did not finish within ${UninstallTimeoutSeconds}s. Killing process."
+                $proc.Kill()
+            } else {
+                Write-Log "RESULT: '$($m.DisplayName)' exited with code $($proc.ExitCode)"
+                if ($proc.ExitCode -ne 0) {
+                    Write-Log "WARNING: Non-zero exit code for '$($m.DisplayName)'. Verify removal manually."
+                }
+            }
+        }
+        catch {
+            Write-Log "ERROR: Failed to launch uninstaller for '$($m.DisplayName)': $($_.Exception.Message)"
+        }
+    }
+}
+
+Write-Log "=== Finished uninstall cleanup on $env:COMPUTERNAME ==="
+exit 0
