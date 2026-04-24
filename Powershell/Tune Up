@@ -1,0 +1,112 @@
+# T3 MSP Tune-Up Script
+# Safe-ish cleanup for Windows workstations
+# Run as SYSTEM/Admin via VSAX
+
+$ErrorActionPreference = "SilentlyContinue"
+
+Write-Output "===== Starting workstation tune-up ====="
+
+# Get starting free space
+$drive = Get-PSDrive C
+$startFreeGB = [math]::Round($drive.Free / 1GB, 2)
+Write-Output "Starting free space on C: $startFreeGB GB"
+
+# Stop common apps that lock cache files
+$appsToStop = @(
+    "Teams",
+    "ms-teams",
+    "OUTLOOK",
+    "OneDrive",
+    "chrome",
+    "msedge",
+    "firefox",
+    "WINWORD",
+    "EXCEL",
+    "POWERPNT",
+    "ONENOTE"
+)
+
+foreach ($app in $appsToStop) {
+    Get-Process -Name $app -ErrorAction SilentlyContinue | Stop-Process -Force
+}
+
+Start-Sleep -Seconds 3
+
+Write-Output "Closed common Microsoft/browser apps."
+
+# Clean Windows temp
+Write-Output "Cleaning Windows temp..."
+Remove-Item "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
+
+# Clean system temp
+Write-Output "Cleaning system temp..."
+Remove-Item "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
+
+# Clean SoftwareDistribution download cache
+Write-Output "Cleaning Windows Update download cache..."
+Stop-Service wuauserv -Force -ErrorAction SilentlyContinue
+Stop-Service bits -Force -ErrorAction SilentlyContinue
+Remove-Item "C:\Windows\SoftwareDistribution\Download\*" -Recurse -Force -ErrorAction SilentlyContinue
+Start-Service bits -ErrorAction SilentlyContinue
+Start-Service wuauserv -ErrorAction SilentlyContinue
+
+# Empty recycle bin
+Write-Output "Emptying recycle bin..."
+Clear-RecycleBin -Force -ErrorAction SilentlyContinue
+
+# Clean user profile caches
+$profiles = Get-ChildItem "C:\Users" -Directory | Where-Object {
+    $_.Name -notin @("Public", "Default", "Default User", "All Users")
+}
+
+foreach ($profile in $profiles) {
+    $userPath = $profile.FullName
+    Write-Output "Cleaning profile: $($profile.Name)"
+
+    $pathsToClean = @(
+        "$userPath\AppData\Local\Temp\*",
+
+        # Teams classic
+        "$userPath\AppData\Roaming\Microsoft\Teams\Cache\*",
+        "$userPath\AppData\Roaming\Microsoft\Teams\Code Cache\*",
+        "$userPath\AppData\Roaming\Microsoft\Teams\GPUCache\*",
+        "$userPath\AppData\Roaming\Microsoft\Teams\IndexedDB\*",
+        "$userPath\AppData\Roaming\Microsoft\Teams\Local Storage\*",
+        "$userPath\AppData\Roaming\Microsoft\Teams\tmp\*",
+
+        # New Teams
+        "$userPath\AppData\Local\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\*",
+
+        # Outlook RoamCache
+        "$userPath\AppData\Local\Microsoft\Outlook\RoamCache\*",
+        "$userPath\AppData\Roaming\Microsoft\Outlook\RoamCache\*",
+
+        # Office cache
+        "$userPath\AppData\Local\Microsoft\Office\16.0\OfficeFileCache\*",
+
+        # Browser caches
+        "$userPath\AppData\Local\Google\Chrome\User Data\Default\Cache\*",
+        "$userPath\AppData\Local\Google\Chrome\User Data\Default\Code Cache\*",
+        "$userPath\AppData\Local\Microsoft\Edge\User Data\Default\Cache\*",
+        "$userPath\AppData\Local\Microsoft\Edge\User Data\Default\Code Cache\*",
+        "$userPath\AppData\Local\Mozilla\Firefox\Profiles\*\cache2\*"
+    )
+
+    foreach ($path in $pathsToClean) {
+        Remove-Item $path -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# Windows component cleanup
+Write-Output "Running DISM component cleanup..."
+Start-Process -FilePath "dism.exe" -ArgumentList "/online /cleanup-image /startcomponentcleanup" -Wait -NoNewWindow
+
+# Final free space
+$drive = Get-PSDrive C
+$endFreeGB = [math]::Round($drive.Free / 1GB, 2)
+$freedGB = [math]::Round($endFreeGB - $startFreeGB, 2)
+
+Write-Output "===== Tune-up complete ====="
+Write-Output "Starting free space: $startFreeGB GB"
+Write-Output "Ending free space: $endFreeGB GB"
+Write-Output "Approximate space freed: $freedGB GB"
