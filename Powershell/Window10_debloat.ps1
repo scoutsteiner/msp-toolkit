@@ -131,10 +131,10 @@ $UserSettings = @{
         PreInstalledAppsEverEnabled       = 0
         SilentInstalledAppsEnabled        = 0
         SoftLandingEnabled                = 0
-        SubscribedContent-310093Enabled   = 0
-        SubscribedContent-338387Enabled   = 0
-        SubscribedContent-338388Enabled   = 0
-        SubscribedContent-338389Enabled   = 0
+        'SubscribedContent-310093Enabled' = 0
+        'SubscribedContent-338387Enabled' = 0
+        'SubscribedContent-338388Enabled' = 0
+        'SubscribedContent-338389Enabled' = 0
         SystemPaneSuggestionsEnabled      = 0
     }
     'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo' = @{
