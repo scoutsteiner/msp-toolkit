@@ -1,0 +1,28 @@
+Write-Host "`n=== COMPUTER ==="
+Get-CimInstance Win32_ComputerSystem |
+    Select-Object Manufacturer,Model,@{N='RAM_GB';E={[math]::Round($_.TotalPhysicalMemory/1GB,1)}}
+
+Write-Host "`n=== CPU ==="
+Get-CimInstance Win32_Processor |
+    Select-Object Name,NumberOfCores,NumberOfLogicalProcessors,MaxClockSpeed
+
+Write-Host "`n=== GPU ==="
+Get-CimInstance Win32_VideoController |
+    Select-Object Name,@{N='VRAM_GB';E={[math]::Round($_.AdapterRAM/1GB,1)}},DriverVersion
+
+Write-Host "`n=== WINDOWS ==="
+Get-CimInstance Win32_OperatingSystem |
+    Select-Object Caption,Version,BuildNumber,OSArchitecture
+
+Write-Host "`n=== STORAGE ==="
+Get-PhysicalDisk |
+    Select-Object FriendlyName,MediaType,@{N='Size_GB';E={[math]::Round($_.Size/1GB)}}
+
+Write-Host "`n=== FREE SPACE ==="
+Get-Volume |
+    Where-Object DriveLetter |
+    Select-Object DriveLetter,FileSystemLabel,@{N='Size_GB';E={[math]::Round($_.Size/1GB)}},@{N='Free_GB';E={[math]::Round($_.SizeRemaining/1GB)}}
+
+Write-Host "`n=== DISPLAY ==="
+Get-CimInstance Win32_DesktopMonitor |
+    Select-Object Name,ScreenWidth,ScreenHeight
